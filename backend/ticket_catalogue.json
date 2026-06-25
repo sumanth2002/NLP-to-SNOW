@@ -1,0 +1,149 @@
+{
+  "bitbucket": {
+    "user_access": {
+      "display_name": "Bitbucket user access",
+      "catalog_item_sys_id_env": "CATALOG_ITEM_BITBUCKET_SYS_ID",
+      "fields": [
+        {
+          "key": "request_type",
+          "label": "Action",
+          "type": "select",
+          "options": ["add user", "remove user"],
+          "required": true,
+          "description": "Whether to add or remove the user"
+        },
+        {
+          "key": "recipient",
+          "label": "User",
+          "type": "user_search",
+          "variable_name": "manager",
+          "required": true,
+          "description": "The person to add or remove"
+        }
+      ]
+    },
+    "create_project": {
+      "display_name": "Bitbucket project creation",
+      "catalog_item_sys_id_env": "CATALOG_ITEM_BITBUCKET_PROJECT_SYS_ID",
+      "fields": [
+        {
+          "key": "project_name",
+          "label": "Project name",
+          "type": "text",
+          "required": true,
+          "description": "Full display name of the project"
+        },
+        {
+          "key": "project_key",
+          "label": "Project key",
+          "type": "text",
+          "required": true,
+          "description": "Short uppercase identifier, no spaces (e.g. MYPROJ)",
+          "validation_hint": "Must be uppercase letters only, no spaces or special characters"
+        },
+        {
+          "key": "project_lead",
+          "label": "Project lead",
+          "type": "user_search",
+          "required": true,
+          "description": "The person responsible for this project"
+        },
+        {
+          "key": "visibility",
+          "label": "Visibility",
+          "type": "select",
+          "options": ["public", "private"],
+          "required": true,
+          "description": "Whether the project is publicly visible or private"
+        }
+      ]
+    },
+    "repo_permission": {
+      "display_name": "Bitbucket repository permission change",
+      "catalog_item_sys_id_env": "CATALOG_ITEM_BITBUCKET_REPO_SYS_ID",
+      "fields": [
+        {
+          "key": "repository_name",
+          "label": "Repository name",
+          "type": "text",
+          "required": true,
+          "description": "The full slug of the repository (e.g. team/my-repo)"
+        },
+        {
+          "key": "recipient",
+          "label": "User",
+          "type": "user_search",
+          "required": true,
+          "description": "The user whose permission should change"
+        },
+        {
+          "key": "permission_level",
+          "label": "Permission level",
+          "type": "select",
+          "options": ["read", "write", "admin"],
+          "required": true,
+          "description": "The access level to grant"
+        }
+      ]
+    }
+  },
+  "jira": {
+    "user_access": {
+      "display_name": "Jira user access",
+      "catalog_item_sys_id_env": "CATALOG_ITEM_JIRA_SYS_ID",
+      "fields": [
+        {
+          "key": "request_type",
+          "label": "Action",
+          "type": "select",
+          "options": ["add user", "remove user"],
+          "required": true,
+          "description": "Whether to add or remove the user"
+        },
+        {
+          "key": "recipient",
+          "label": "User",
+          "type": "user_search",
+          "required": true,
+          "description": "The person to add or remove"
+        }
+      ]
+    },
+    "create_project": {
+      "display_name": "Jira project creation",
+      "catalog_item_sys_id_env": "CATALOG_ITEM_JIRA_PROJECT_SYS_ID",
+      "fields": [
+        {
+          "key": "project_name",
+          "label": "Project name",
+          "type": "text",
+          "required": true,
+          "description": "Full display name of the Jira project"
+        },
+        {
+          "key": "project_key",
+          "label": "Project key",
+          "type": "text",
+          "required": true,
+          "description": "Short uppercase identifier used in issue numbers (e.g. PROJ)",
+          "validation_hint": "Must be uppercase letters only, 2-10 characters, no spaces"
+        },
+        {
+          "key": "project_lead",
+          "label": "Project lead",
+          "type": "user_search",
+          "required": true,
+          "description": "The Jira project administrator"
+        },
+        {
+          "key": "project_type",
+          "label": "Project type",
+          "type": "select",
+          "options": ["software", "service_desk", "business"],
+          "required": true,
+          "description": "The type of Jira project template to use"
+        }
+      ]
+    }
+  }
+}
