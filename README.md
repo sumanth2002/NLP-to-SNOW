@@ -233,7 +233,6 @@ Default ports:
 - **User selection cards** — shown when SNOW returns multiple matches
 - **Processing spinner** — visible while backend is working, input disabled to prevent duplicate sends
 - **Ticket history** — sidebar shows all tickets created in the current session with RITM, request number, type, recipient, and timestamp
-- **LLM status indicator** — top of sidebar shows 🟢 Online / 🔴 Offline by pinging Ollama's health endpoint
 
 ---
 
