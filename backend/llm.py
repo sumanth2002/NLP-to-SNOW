@@ -9,7 +9,6 @@ Field EXTRACTION and STATE are handled entirely in agent.py (Python).
 The LLM never decides what has been collected or what is missing.
 """
 
-import google.generativeai as genai
 import json
 import re
 import os
@@ -17,6 +16,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
+from google import genai
+from google.genai import types as genai_types
 
 load_dotenv()
 
@@ -26,7 +27,12 @@ _api_key = os.getenv("GEMINI_API_KEY")
 if not _api_key:
     raise EnvironmentError("GEMINI_API_KEY is not set in environment / .env")
 
-genai.configure(api_key=_api_key)
+_client = genai.Client(api_key=_api_key)
+_MODEL  = "gemini-2.5-flash"
+_CONFIG = genai_types.GenerateContentConfig(
+    response_mime_type="application/json",
+    temperature=0.0,
+)
 
 # ------------------------------------------------------------------
 # Load catalogue once at import time
@@ -44,16 +50,36 @@ def _catalogue_summary() -> str:
     return "\n".join(lines)
 
 
-# ------------------------------------------------------------------
-# Model — shared singleton
-# ------------------------------------------------------------------
-_model = genai.GenerativeModel(
-    "gemini-1.5-pro",
-    generation_config={
-        "response_mime_type": "application/json",
-        "temperature": 0.0,
-    },
-)
+class QuotaExceededError(Exception):
+    """Raised when the Gemini API returns a 429 quota error."""
+    def __init__(self, retry_seconds: int = 60):
+        self.retry_seconds = retry_seconds
+        super().__init__(f"Gemini API quota exceeded. Please wait {retry_seconds}s before retrying.")
+
+
+def _extract_retry_seconds(exc: Exception) -> int:
+    """Pull the retryDelay value out of a Gemini 429 error string."""
+    m = re.search(r'retryDelay["\s:]+(\d+)', str(exc))
+    return int(m.group(1)) if m else 60
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    return "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc)
+
+
+def _generate(prompt: str) -> str:
+    """Single helper that calls Gemini and returns the text response."""
+    try:
+        resp = _client.models.generate_content(
+            model=_MODEL,
+            contents=prompt,
+            config=_CONFIG,
+        )
+        return resp.text
+    except Exception as e:
+        if _is_quota_error(e):
+            raise QuotaExceededError(_extract_retry_seconds(e)) from e
+        raise
 
 # ------------------------------------------------------------------
 # 1. detect_intent
@@ -130,10 +156,11 @@ def detect_intent(prompt: str) -> dict:
 
     # LLM call
     try:
-        resp = _model.generate_content(f"{_INTENT_SYSTEM}\n\nUser: {prompt}")
-        result = _safe_json(resp.text)
+        result = _safe_json(_generate(f"{_INTENT_SYSTEM}\n\nUser: {prompt}"))
         if result and "intent" in result:
             return result
+    except QuotaExceededError:
+        raise   # let agent.py / caller surface the friendly message
     except Exception as e:
         logger.warning(f"[llm] detect_intent LLM call failed: {e}")
 
@@ -189,10 +216,7 @@ def ask_next_field(
             "error": error,
         }
         try:
-            resp = _model.generate_content(
-                f"{_QUESTION_SYSTEM}\n\n{json.dumps(payload)}"
-            )
-            result = _safe_json(resp.text)
+            result = _safe_json(_generate(f"{_QUESTION_SYSTEM}\n\n{json.dumps(payload)}"))
             if result and result.get("question"):
                 return result["question"]
         except Exception as e:
@@ -248,10 +272,7 @@ def build_payload(schema: dict, collected: dict) -> dict:
         "collected_fields": collected,
     }
     try:
-        resp = _model.generate_content(
-            f"{_PAYLOAD_SYSTEM}\n\n{json.dumps(payload, indent=2)}"
-        )
-        result = _safe_json(resp.text)
+        result = _safe_json(_generate(f"{_PAYLOAD_SYSTEM}\n\n{json.dumps(payload, indent=2)}"))
         if result and "variables" in result:
             return result["variables"]
     except Exception as e:

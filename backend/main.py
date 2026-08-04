@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 
 from agent import ticket_agent
+from splunk_agent import splunk_agent, is_splunk_query
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -121,6 +122,36 @@ async def create_ticket(req: TicketRequest):
         result["context"] = context
 
     return TicketResponse(**{k: v for k, v in result.items() if k in TicketResponse.model_fields})
+
+
+# ------------------------------------------------------------------
+# Splunk query endpoint
+# ------------------------------------------------------------------
+class SplunkRequest(BaseModel):
+    prompt: str
+
+    @field_validator("prompt")
+    @classmethod
+    def prompt_must_not_be_blank(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("prompt cannot be blank")
+        return v.strip()
+
+
+@app.post("/splunk-query")
+async def splunk_query(req: SplunkRequest):
+    """
+    Natural-language log query endpoint.
+    The frontend sends the raw user prompt; this endpoint returns
+    the SPL query, description, row count, and result rows.
+    """
+    logger.info(f"[/splunk-query] prompt={req.prompt!r}")
+    try:
+        result = splunk_agent(req.prompt)
+    except Exception as e:
+        logger.error(f"Splunk agent crash: {e}\n{traceback.format_exc()}")
+        return {"status": "failure", "message": f"Internal error: {str(e)[:200]}"}
+    return result
 
 
 # ------------------------------------------------------------------

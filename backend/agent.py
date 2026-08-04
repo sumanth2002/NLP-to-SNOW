@@ -9,7 +9,7 @@ import logging
 import traceback
 from typing import Dict, List, Optional
 
-from llm import detect_intent, ask_next_field, build_payload, TICKET_CATALOGUE
+from llm import detect_intent, ask_next_field, build_payload, TICKET_CATALOGUE, QuotaExceededError
 from ritm_client import search_users, create_ritm, update_request_field
 from servicenow_client import (
     get_ticket_details,
@@ -46,6 +46,12 @@ _VALIDATORS = {
 def ticket_agent(prompt: str, context: Optional[Dict] = None) -> Dict:
     try:
         return _impl((prompt or "").strip(), context or {})
+    except QuotaExceededError as e:
+        return {
+            "status":  "quota",
+            "message": f"⏳ Gemini API daily quota reached. Please cool down and retry in **{e.retry_seconds}s**.",
+            "context": context or {},
+        }
     except Exception as e:
         logger.error(f"Agent crashed: {e}\n{traceback.format_exc()}")
         return {
