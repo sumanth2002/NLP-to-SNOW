@@ -305,6 +305,96 @@ Natural-language log search endpoint.
 
 ---
 
+## How the Splunk Feature Works
+
+Implemented in [`backend/splunk_agent.py`](backend/splunk_agent.py) and [`backend/splunk_client.py`](backend/splunk_client.py).
+
+The frontend automatically routes your message to the Splunk pipeline instead of the ticket agent whenever it detects log-related keywords (`log`, `logs`, `splunk`, `show me`, `get me`, `fetch`, `outage`, `error`, `failed login`, etc.). No special prefix is needed — just describe what you want in plain English.
+
+### How a query is processed
+
+```
+User prompt (plain English)
+        │
+        ▼
+  Gemini 2.5 Flash  ──►  SPL plan JSON
+  (splunk_agent.py)       { index, spl, earliest, latest, description }
+        │
+        ▼
+  Splunk REST API  ──►  raw log rows
+  (splunk_client.py)     POST /services/search/jobs  (exec_mode=blocking)
+                         GET  /services/search/jobs/{sid}/results
+        │
+        ▼
+  Gemini 2.5 Flash  ──►  AI plain-English summary  (up to 50 log lines)
+  Gemini 2.5 Flash  ──►  Outage analysis JSON       (up to 100 log lines)
+        │
+        ▼
+  Streamlit UI renders:
+    - Query header + result count
+    - Scrollable log table (Time + Log Message columns)
+    - ⬇️ Download CSV button
+    - Outage Analysis panel (severity badge + signals + recommendation)
+    - 🤖 AI Summary
+```
+
+### Example prompts
+
+| What to type | What happens |
+|---|---|
+| `get me yesterday's logs from the dummy index` | Fetches all events from `index=dummy` for yesterday |
+| `show me error logs from nginx today` | Adds `log_level=ERROR` filter, time range = today |
+| `last 7 days of logs from the payments index` | Sets `earliest=-7d@d` |
+| `get me the latest logs for dummy application` | No time filter (`earliest=alltime`) |
+| `find any failed logins from dummy app` | Adds `"authentication failed" OR "login failed"` filter |
+| `check if there was an account lock for any user in dummy` | Adds `"account locked" OR "lockout"` filter |
+| `check for outage in dummy app yesterday` | Adds broad error-signal filter + sets time to yesterday |
+| `get logs from dummy from 2pm to 4pm` | Absolute time range — today 14:00–16:00 |
+| `get logs from dummy from 2024-06-10 10:00 to 12:00` | Absolute time range — specific date |
+
+### Time range syntax
+
+| What you say | Splunk time range |
+|---|---|
+| `yesterday` | `earliest=-1d@d  latest=@d` |
+| `today` | `earliest=@d  latest=now` |
+| `last hour` | `earliest=-1h  latest=now` |
+| `last 24 hours` | `earliest=-24h  latest=now` |
+| `last 7 days` | `earliest=-7d@d  latest=now` |
+| `latest` / `recent` / no time mentioned | `earliest=alltime  latest=now` |
+| `from 2pm to 4pm` | absolute `MM/DD/YYYY:14:00:00` → `16:00:00` (today's date) |
+| `from 2024-06-10 10:00 to 12:00` | absolute `06/10/2024:10:00:00` → `12:00:00` |
+
+### Outage analysis
+
+After every successful query, Gemini analyses up to 100 log lines for outage signals and returns a structured result rendered in the UI:
+
+| Severity | Signals looked for |
+|---|---|
+| `critical` | Service completely down, data loss risk |
+| `high` | HTTP 5xx errors, connection refused, OOM/killed |
+| `medium` | Timeouts, partial failures, degraded performance |
+| `low` | Isolated/minor errors, normal noise |
+| `none` | No outage signals found |
+
+The panel shows a **severity badge**, a list of **detected signals**, and a one-sentence **recommendation**.
+
+### Splunk connection details
+
+[`splunk_client.py`](backend/splunk_client.py) connects to the Splunk **management port** (default `8089`) using HTTP Basic Auth. It uses `exec_mode=blocking` so results come back in a single round-trip. Self-signed TLS certificates are accepted automatically (suitable for local/dev Splunk instances). Up to **100 rows** are returned per query.
+
+The three env vars it reads:
+
+```env
+SPLUNK_URL=https://your-splunk-host:8089   # management port, not the UI port
+SPLUNK_USER=admin
+SPLUNK_PASS=your_splunk_password
+```
+
+> If Splunk is not available, ticket creation still works normally. The Splunk pipeline is only invoked when a log-related prompt is detected.
+
+---
+
 ## How the Ticket Agent Works
 
 The agent in [`agent.py`](backend/agent.py) is a stateless function — all state is held in the `context` dict that the frontend echoes back on every request.
